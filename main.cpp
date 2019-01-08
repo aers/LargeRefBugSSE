@@ -32,29 +32,6 @@ typedef bool(*_TESObjectREFR_IsValidLargeRef)(RE::TESObjectREFR * refr);
 RelocAddr<_TESObjectREFR_IsValidLargeRef> TESObjectREFR_IsValidLargeRef(0x00239D10);
 
 PluginHandle					g_pluginHandle = kPluginHandle_Invalid;
-SKSEMessagingInterface			* g_messaging = nullptr;
-
-void FillRNAM()
-{
-	_MESSAGE("data load complete, gathering valid large references");
-	auto dataHandler = DataHandler::GetSingleton();
-	_MESSAGE("total worldspace: %d total refr: %d", dataHandler->arrWRLD.count, dataHandler->arrREFR.count);
-}
-
-
-void SKSEMessageHandler(SKSEMessagingInterface::Message * message)
-{
-	switch (message->type)
-	{
-	case SKSEMessagingInterface::kMessage_DataLoaded:
-	{
-		FillRNAM();
-	}
-	break;
-	default:
-		break;
-	}
-}
 
 bool hook_TESObjectREFR_LoadForm(RE::TESObjectREFR * refr, ModInfo * modInfo)
 {
@@ -187,19 +164,11 @@ extern "C" {
 			_FATALERROR("couldn't create codegen buffer. this is fatal. skipping remainder of init process.");
 			return false;
 		}
-
-		g_messaging = (SKSEMessagingInterface *)skse->QueryInterface(kInterface_Messaging);
-		if (!g_messaging) {
-			_ERROR("couldn't get messaging interface, disabling patches that require it");
-		}
-
 		return true;
 	}
 
 	bool SKSEPlugin_Load(const SKSEInterface * skse) {
 
-		if (g_messaging)
-			g_messaging->RegisterListener(g_pluginHandle, "SKSE", SKSEMessageHandler);
 
 		//_MESSAGE("Installing Worldspace Load Hook");
 		//orig_TESWorldSpace_LoadForm = *vtbl_TESWorldSpace_LoadForm;
@@ -218,7 +187,7 @@ extern "C" {
 
 		_MESSAGE("done");
 
-		constexpr UInt64 retn_1 = 0xC300000001C0C748;
+		//constexpr UInt64 retn_1 = 0xC300000001C0C748;
 		//constexpr uintptr_t large_ref_patch = 0x00239D10;
 
 		//RelocAddr<uintptr_t> LargeRefPatch = large_ref_patch;
