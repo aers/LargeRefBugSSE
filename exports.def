@@ -1,0 +1,4 @@
+LIBRARY	"LargeRefBug"
+EXPORTS
+SKSEPlugin_Query
+SKSEPlugin_Load
