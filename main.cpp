@@ -8,7 +8,7 @@
 #include "RE/TESObjectREFR.h"
 #include "RE/TESWorldSpace.h"
 #include "RE/TESForm.h"
-#include "../../../../Program Files (x86)/Microsoft Visual Studio 14.0/VC/include/cinttypes"
+#include <cinttypes>
 #include "skse64_common/BranchTrampoline.h"
 
 #pragma intrinsic(_ReturnAddress)
@@ -69,18 +69,18 @@ bool hook_TESWorldSpace_LoadForm(RE::TESWorldSpace * worldSpace, ModInfo * modIn
 	bool retVal = orig_TESWorldSpace_LoadForm(worldSpace, modInfo);
 
 	_MESSAGE("TESWorldSpace LoadForm called with Worldspace name %s (ptr 0x%016" PRIXPTR ") and plugin %s, unk modinfo hashmap size = %d", dynamic_cast<RE::TESForm*>(worldSpace)->GetName(), worldSpace, modInfo->name, worldSpace->unk1D0.max_size() - worldSpace->unk1D0.free_count());
-	//worldSpace->unk250.clear();
-	//worldSpace->unk280.clear();
-	//worldSpace->unk2B0.clear();
-	_MESSAGE("unk250 count %d unk280 count %d unk2B0 count %d", worldSpace->unk250.size(),
-		worldSpace->unk280.size(), worldSpace->unk2B0.size());
+	//worldSpace->largeReferenceData.cellFormIDMap.clear();
+	//worldSpace->largeReferenceData.FormIDCellMap.clear();
+	//worldSpace->largeReferenceData.cellFormIDMapFiltered.clear();
+	_MESSAGE("largeReferenceData.cellFormIDMap count %d largeReferenceData.FormIDCellMap count %d largeReferenceData.cellFormIDMapFiltered count %d", worldSpace->largeReferenceData.cellFormIDMap.size(),
+		worldSpace->largeReferenceData.FormIDCellMap.size(), worldSpace->largeReferenceData.cellFormIDMapFiltered.size());
 	/*
 	if (strncmp("Tamriel", dynamic_cast<RE::TESForm*>(worldSpace)->GetName(), 7) == 0)
 	{
 		int count = 0;
-		for (int i = 0; i < worldSpace->unk250.max_size(); i++)
+		for (int i = 0; i < worldSpace->largeReferenceData.cellFormIDMap.max_size(); i++)
 		{
-			auto entry = worldSpace->unk250._entries[i];
+			auto entry = worldSpace->largeReferenceData.cellFormIDMap._entries[i];
 
 			if (entry.next == nullptr)
 				continue;
@@ -89,18 +89,18 @@ bool hook_TESWorldSpace_LoadForm(RE::TESWorldSpace * worldSpace, ModInfo * modIn
 
 			count += *entry.GetValue();
 		}
-		_MESSAGE("unk250 total count %d", count);
+		_MESSAGE("largeReferenceData.cellFormIDMap total count %d", count);
 		count = 0;
-		for (int i = 0; i < worldSpace->unk2B0.max_size(); i++)
+		for (int i = 0; i < worldSpace->largeReferenceData.cellFormIDMapFiltered.max_size(); i++)
 		{
-			auto entry = worldSpace->unk2B0._entries[i];
+			auto entry = worldSpace->largeReferenceData.cellFormIDMapFiltered._entries[i];
 
 			if (entry.next == nullptr)
 				continue;
 
 			count += *entry.GetValue();
 		}
-		_MESSAGE("unk2B0 total count %d", count);
+		_MESSAGE("largeReferenceData.cellFormIDMapFiltered total count %d", count);
 	}*/	
 
 	return retVal;

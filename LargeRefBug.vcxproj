@@ -78,7 +78,7 @@
       </Message>
     </PreBuildEvent>
     <PostBuildEvent>
-      <Command>xcopy /y "$(OutDir)$(TargetFileName)" "C:\Skyrim\MO2\mods\Large Reference Bug Testing\skse\plugins"</Command>
+      <Command>xcopy /y "$(OutDir)$(TargetFileName)" "D:\Skyrim Modding\MO2\mods\Large Reference Bug Testing\skse\plugins"</Command>
     </PostBuildEvent>
     <PostBuildEvent>
       <Message>
@@ -116,7 +116,7 @@
     <PostBuildEvent>
       <Message>
       </Message>
-      <Command>xcopy /y $(OutDir)$(TargetFileName) C:\Skyrim\MO2\mods\Large Reference Bug Testing\skse\plugins\LargeRefBug.dll</Command>
+      <Command>xcopy /y "$(OutDir)$(TargetFileName)" "D:\Skyrim Modding\MO2\mods\Large Reference Bug Testing\skse\plugins"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
