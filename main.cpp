@@ -42,9 +42,10 @@ RelocAddr<uintptr_t> RNAMHook_Enter = 0x00238D08;
 PluginHandle					g_pluginHandle = kPluginHandle_Invalid;
 
 typedef std::unordered_map<UInt32, std::unordered_set<UInt32>> cellFormIDMap;
+typedef std::unordered_map<UInt32, UInt32> formIDCellMap;
 
 std::unordered_map<RE::TESWorldSpace *, cellFormIDMap> worldSpaceRNAMMap;
-std::unordered_map<UInt32, UInt32> formIDCellMap;
+std::unordered_map<RE::TESWorldSpace *, formIDCellMap> worldSpaceFormIDCellMap;
 
 bool hook_TESObjectREFR_LoadForm(RE::TESObjectREFR * refr, ModInfo * modInfo)
 {
@@ -59,7 +60,10 @@ bool hook_TESWorldSpace_LoadForm(RE::TESWorldSpace * worldSpace, ModInfo * modIn
 	_MESSAGE("TESWorldSpace LoadForm called with Worldspace name %s (ptr 0x%016" PRIXPTR ") and plugin %s", dynamic_cast<RE::TESForm*>(worldSpace)->GetName(), worldSpace, modInfo->name);
 	
 	if (worldSpaceRNAMMap.find(worldSpace) == worldSpaceRNAMMap.end())
+	{
 		worldSpaceRNAMMap.insert(make_pair(worldSpace, cellFormIDMap()));
+		worldSpaceFormIDCellMap.insert(make_pair(worldSpace, formIDCellMap()));
+	}
 
 	bool retVal = orig_TESWorldSpace_LoadForm(worldSpace, modInfo);
 
@@ -110,6 +114,10 @@ bool hook_TESWorldSpace_LoadBuffer(RE::TESWorldSpace * worldSpace, RE::BGSLoadFo
 	return retVal;
 }
 
+SKSEMessagingInterface			* g_messaging = nullptr;
+
+
+
 char hook_ModInfo_IsMaster(ModInfo * modInfo)
 {
 	if (!(modInfo->unk438 & 1))
@@ -148,7 +156,110 @@ RelocAddr<_ResolveLoadOrderFormID> ResolveLoadOrderFormID = 0x001959D0;
 
 constexpr UInt32 rnam_deleted = 0x7FFF7FFF; // 32767, 32767
 
-inline void GatherRNAMs(std::unordered_set<UInt32> * formIDs, UInt32 * rnam, cellFormIDMap * wsMap, ModInfo * modInfo)
+UInt32 GetRNAMCount(RE::BSTHashMap<RE::TESWorldSpace::XYPlane, UInt32 *> * map)
+{
+	int count = 0;
+	for (int i = 0; i < map->max_size(); i++)
+	{
+		auto entry = map->_entries[i];
+
+		if (entry.next == nullptr)
+			continue;
+
+		count += *entry.GetValue();
+	}
+
+	return count;
+}
+void UpdateWorldspaceRNAM()
+{
+	_MESSAGE("Load completed, updating all worldspace RNAM data");
+
+	for (auto const& it : worldSpaceRNAMMap)
+	{
+		RE::TESWorldSpace * ws = it.first;
+
+		auto worldSpaceFormIDCellMapIt = worldSpaceFormIDCellMap.find(ws);
+
+		cellFormIDMap cellMap = it.second;
+		formIDCellMap formMap = worldSpaceFormIDCellMapIt->second;
+
+		_MESSAGE("worldspace %s current RNAM cell count %d current filtered RNAM count %d", dynamic_cast<RE::TESForm*>(ws)->GetName(), GetRNAMCount(&ws->largeReferenceData.cellFormIDMap), GetRNAMCount(&ws->largeReferenceData.cellFormIDMapFiltered));
+		ws->largeReferenceData.cellFormIDMap.clear();
+		ws->largeReferenceData.formIDCellMap.clear();
+		ws->largeReferenceData.cellFormIDMapFiltered.clear();
+		
+		// form id map
+		for (auto const& formIt : formMap)
+		{
+			RE::TESWorldSpace::XYPlane formIDCellPlane = *reinterpret_cast<RE::TESWorldSpace::XYPlane const *>(formIt.second);
+
+			ws->largeReferenceData.formIDCellMap.insert(formIt.first, formIDCellPlane);
+		}
+
+		// RNAM maps
+		for (auto const& cellIt : cellMap)
+		{
+			std::unordered_set<UInt32> formIDSet = cellIt.second;
+			RE::TESWorldSpace::XYPlane cellPlane = *reinterpret_cast<RE::TESWorldSpace::XYPlane const *>(&cellIt.first);
+
+			UInt32 * formIDArray = static_cast<UInt32 *>(Heap_Allocate((formIDSet.size() + 1) * sizeof(UInt32)));
+
+			formIDArray[0] = formIDSet.size();
+
+			auto i = 1;
+
+			for (auto formID : formIDSet)
+			{
+				formIDArray[i] = formID;
+				i++;
+			}
+
+			ws->largeReferenceData.cellFormIDMap.insert(cellPlane, formIDArray);
+			ws->largeReferenceData.cellFormIDMapFiltered.insert(cellPlane, formIDArray);
+		}
+
+		_MESSAGE("new RNAM count %d", GetRNAMCount(&ws->largeReferenceData.cellFormIDMapFiltered));
+
+	}
+
+	_MESSAGE("finished all worldspaces");
+	worldSpaceRNAMMap.clear();
+	worldSpaceFormIDCellMap.clear();
+}
+
+void SKSEMessageHandler(SKSEMessagingInterface::Message * message)
+{
+	switch (message->type)
+	{
+	case SKSEMessagingInterface::kMessage_DataLoaded:
+	{
+		UpdateWorldspaceRNAM();
+	}
+	break;
+	default:
+		break;
+	}
+}
+
+/*
+ * logic
+ * 
+ * parse RNAM data in plugin in load order
+ * RNAM entry:
+ *	cell y,x -> refr form ID + refr cell y,x
+ *	
+ * if cell y,x == refr cell y,x
+ *   add to list unless duplicate
+ *   if form ID exists in another cell already
+ *     remove from other cell, as this reference has been moved
+ * if refr cell y,x == 32767, 32767 (max)
+ *   refr considered deleted, will be removed from cell it exists in
+ * otherwise
+ *   discard RNAM since it is not for the correct cell
+ */
+
+inline void GatherRNAMs(std::unordered_set<UInt32> * formIDs, UInt32 * rnam, cellFormIDMap * wsCFIDMap, formIDCellMap * wsFIDCMap, ModInfo * modInfo)
 {
 	const UInt32 currentCell = rnam[0];
 
@@ -174,16 +285,16 @@ inline void GatherRNAMs(std::unordered_set<UInt32> * formIDs, UInt32 * rnam, cel
 				duplicate = true;
 			else
 			{
-				auto formMapIt = formIDCellMap.find(loadOrderFormID);
+				auto formMapIt = wsFIDCMap->find(loadOrderFormID);
 
-				if (formMapIt != formIDCellMap.end())
+				if (formMapIt != wsFIDCMap->end())
 				{
 					if (formMapIt->second != currentCell)
 					{
 						moved = true;
 						oldCell = formMapIt->second;
-						auto wsIt = wsMap->find(oldCell);
-						if (wsIt != wsMap->end())
+						auto wsIt = wsCFIDMap->find(oldCell);
+						if (wsIt != wsCFIDMap->end())
 						{
 							wsIt->second.erase(loadOrderFormID);
 						}
@@ -192,7 +303,7 @@ inline void GatherRNAMs(std::unordered_set<UInt32> * formIDs, UInt32 * rnam, cel
 				}
 				else
 				{
-					formIDCellMap.insert(std::make_pair(loadOrderFormID, currentCell));
+					wsFIDCMap->insert(std::make_pair(loadOrderFormID, currentCell));
 				}
 			}
 		}
@@ -200,7 +311,7 @@ inline void GatherRNAMs(std::unordered_set<UInt32> * formIDs, UInt32 * rnam, cel
 		if (deleted)
 		{
 			formIDs->erase(loadOrderFormID);
-			formIDCellMap.erase(loadOrderFormID);
+			wsFIDCMap->erase(loadOrderFormID);
 
 			_MESSAGE("x %d y %d load order formid 0x%08x local formid 0x%08x DELETED", refrCellPlane.y, refrCellPlane.x, loadOrderFormID, formID);
 		}
@@ -232,22 +343,32 @@ void ReadRNAM(RE::TESWorldSpace * worldSpace, ModInfo * modInfo, UInt32 * rnam)
 
 	_MESSAGE("read RNAM hook called on worldspace %s modname %s rnam cell x %d, y %d rnam count %d", dynamic_cast<RE::TESForm*>(worldSpace)->GetName(), modInfo->name, plane.y, plane.x, rnam[1]);
 
-	auto wsMapIterator = worldSpaceRNAMMap.find(worldSpace);
+	auto wsRNAMMapIterator = worldSpaceRNAMMap.find(worldSpace);
 
-	if (wsMapIterator != worldSpaceRNAMMap.end())
+	if (wsRNAMMapIterator != worldSpaceRNAMMap.end())
 	{
-		auto cellMap = wsMapIterator->second;
-		const auto cellMapIterator = cellMap.find(rnam[0]);
+		auto wsFormIDCellMapIterator = worldSpaceFormIDCellMap.find(worldSpace);
 
-		if (cellMapIterator == cellMap.end())
+		if (wsFormIDCellMapIterator != worldSpaceFormIDCellMap.end())
 		{
-			std::unordered_set<UInt32> formIDs;
-			GatherRNAMs(&formIDs, rnam, &cellMap, modInfo);
-			cellMap.insert(std::make_pair(rnam[0], formIDs));
+			auto cellFormIDMap = wsRNAMMapIterator->second;
+			auto formIDCellMap = wsFormIDCellMapIterator->second;
+			const auto cellMapIterator = cellFormIDMap.find(rnam[0]);
+
+			if (cellMapIterator == cellFormIDMap.end())
+			{
+				std::unordered_set<UInt32> formIDs;
+				GatherRNAMs(&formIDs, rnam, &cellFormIDMap, &formIDCellMap, modInfo);
+				cellFormIDMap.insert(std::make_pair(rnam[0], formIDs));
+			}
+			else
+			{
+				GatherRNAMs(&cellMapIterator->second, rnam, &cellFormIDMap, &formIDCellMap, modInfo);
+			}
 		}
 		else
 		{
-			GatherRNAMs(&cellMapIterator->second, rnam, &cellMap, modInfo);
+			_MESSAGE("something went horribly wrong");
 		}
 	}
 	else
@@ -294,11 +415,19 @@ extern "C" {
 			_FATALERROR("couldn't create codegen buffer. this is fatal. skipping remainder of init process.");
 			return false;
 		}
+
+		g_messaging = (SKSEMessagingInterface *)skse->QueryInterface(kInterface_Messaging);
+		if (!g_messaging) {
+			_ERROR("couldn't get messaging interface, disabling patches that require it");
+		}
+
 		return true;
 	}
 
 	bool SKSEPlugin_Load(const SKSEInterface * skse) {
 
+		if (g_messaging)
+			g_messaging->RegisterListener(g_pluginHandle, "SKSE", SKSEMessageHandler);
 
 		_MESSAGE("Installing Worldspace Load Hook");
 		orig_TESWorldSpace_LoadForm = *vtbl_TESWorldSpace_LoadForm;
