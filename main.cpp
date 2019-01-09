@@ -199,6 +199,9 @@ inline void GatherRNAMs(std::unordered_set<UInt32> * formIDs, UInt32 * rnam, cel
 
 		if (deleted)
 		{
+			formIDs->erase(loadOrderFormID);
+			formIDCellMap.erase(loadOrderFormID);
+
 			_MESSAGE("x %d y %d load order formid 0x%08x local formid 0x%08x DELETED", refrCellPlane.y, refrCellPlane.x, loadOrderFormID, formID);
 		}
 		else if(duplicate)
