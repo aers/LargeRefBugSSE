@@ -175,27 +175,24 @@ void UpdateWorldspaceRNAM()
 {
 	_MESSAGE("Load completed, updating all worldspace RNAM data");
 
-	for (auto const& it : worldSpaceRNAMMap)
+	for (auto const& [ws, cellMap] : worldSpaceRNAMMap)
 	{
-		RE::TESWorldSpace * ws = it.first;
-
 		auto worldSpaceFormIDCellMapIt = worldSpaceFormIDCellMap.find(ws);
 
-		cellFormIDMap cellMap = it.second;
 		formIDCellMap formMap = worldSpaceFormIDCellMapIt->second;
 
-		_MESSAGE("worldspace %s current RNAM cell count %d current filtered RNAM count %d", dynamic_cast<RE::TESForm*>(ws)->GetName(), GetRNAMCount(&ws->largeReferenceData.cellFormIDMap), GetRNAMCount(&ws->largeReferenceData.cellFormIDMapFiltered));
+		//_MESSAGE("worldspace %s current RNAM cell count %d current filtered RNAM count %d", dynamic_cast<RE::TESForm*>(ws)->GetName(), GetRNAMCount(&ws->largeReferenceData.cellFormIDMap), GetRNAMCount(&ws->largeReferenceData.cellFormIDMapFiltered));
 		ws->largeReferenceData.cellFormIDMap.clear();
 		ws->largeReferenceData.formIDCellMap.clear();
 		ws->largeReferenceData.cellFormIDMapFiltered.clear();
-		
+
 		// form id map
 		for (auto const& formIt : formMap)
 		{
-			RE::TESWorldSpace::XYPlane formIDCellPlane = *reinterpret_cast<RE::TESWorldSpace::XYPlane const *>(formIt.second);
-
+			RE::TESWorldSpace::XYPlane formIDCellPlane = *reinterpret_cast<RE::TESWorldSpace::XYPlane const *>(&formIt.second);
 			ws->largeReferenceData.formIDCellMap.insert(formIt.first, formIDCellPlane);
 		}
+
 
 		// RNAM maps
 		for (auto const& cellIt : cellMap)
@@ -204,22 +201,25 @@ void UpdateWorldspaceRNAM()
 			RE::TESWorldSpace::XYPlane cellPlane = *reinterpret_cast<RE::TESWorldSpace::XYPlane const *>(&cellIt.first);
 
 			UInt32 * formIDArray = static_cast<UInt32 *>(Heap_Allocate((formIDSet.size() + 1) * sizeof(UInt32)));
+			UInt32 * formIDArraySecond = static_cast<UInt32 *>(Heap_Allocate((formIDSet.size() + 1) * sizeof(UInt32)));
 
 			formIDArray[0] = formIDSet.size();
+			formIDArraySecond[0] = formIDSet.size();
 
 			auto i = 1;
 
 			for (auto formID : formIDSet)
 			{
 				formIDArray[i] = formID;
+				formIDArraySecond[i] = formID;
 				i++;
 			}
 
 			ws->largeReferenceData.cellFormIDMap.insert(cellPlane, formIDArray);
-			ws->largeReferenceData.cellFormIDMapFiltered.insert(cellPlane, formIDArray);
+			ws->largeReferenceData.cellFormIDMapFiltered.insert(cellPlane, formIDArraySecond);
 		}
 
-		_MESSAGE("new RNAM count %d", GetRNAMCount(&ws->largeReferenceData.cellFormIDMapFiltered));
+		//_MESSAGE("new RNAM count %d", GetRNAMCount(&ws->largeReferenceData.cellFormIDMapFiltered));
 
 	}
 
@@ -313,27 +313,27 @@ inline void GatherRNAMs(std::unordered_set<UInt32> * formIDs, UInt32 * rnam, cel
 			formIDs->erase(loadOrderFormID);
 			wsFIDCMap->erase(loadOrderFormID);
 
-			_MESSAGE("x %d y %d load order formid 0x%08x local formid 0x%08x DELETED", refrCellPlane.y, refrCellPlane.x, loadOrderFormID, formID);
+			//_MESSAGE("x %d y %d load order formid 0x%08x local formid 0x%08x DELETED", refrCellPlane.y, refrCellPlane.x, loadOrderFormID, formID);
 		}
 		else if(duplicate)
 		{
-			_MESSAGE("x %d y %d load order formid 0x%08x local formid 0x%08x DUPLICATE", refrCellPlane.y, refrCellPlane.x, loadOrderFormID, formID);
+			//_MESSAGE("x %d y %d load order formid 0x%08x local formid 0x%08x DUPLICATE", refrCellPlane.y, refrCellPlane.x, loadOrderFormID, formID);
 		}
 		else if (!inCell)
 		{
-			_MESSAGE("x %d y %d load order formid 0x%08x local formid 0x%08x NOT IN CELL", refrCellPlane.y, refrCellPlane.x, loadOrderFormID, formID);
+			//_MESSAGE("x %d y %d load order formid 0x%08x local formid 0x%08x NOT IN CELL", refrCellPlane.y, refrCellPlane.x, loadOrderFormID, formID);
 		}
 		else if (moved)
 		{
 			RE::TESWorldSpace::XYPlane oldCellPlane = *reinterpret_cast<RE::TESWorldSpace::XYPlane *>(&oldCell);
-			_MESSAGE("x %d y %d load order formid 0x%08x local formid 0x%08x VALID and MOVED from previous cell x %d y %d", refrCellPlane.y, refrCellPlane.x, loadOrderFormID, formID, oldCellPlane.y, oldCellPlane.x);
+			//_MESSAGE("x %d y %d load order formid 0x%08x local formid 0x%08x VALID and MOVED from previous cell x %d y %d", refrCellPlane.y, refrCellPlane.x, loadOrderFormID, formID, oldCellPlane.y, oldCellPlane.x);
 		}
 		else
 		{
-			_MESSAGE("x %d y %d load order formid 0x%08x local formid 0x%08x VALID", refrCellPlane.y, refrCellPlane.x, loadOrderFormID, formID);
+			//_MESSAGE("x %d y %d load order formid 0x%08x local formid 0x%08x VALID", refrCellPlane.y, refrCellPlane.x, loadOrderFormID, formID);
 		}
 	}
-	_MESSAGE("gathered RNAM count in cell %d", formIDs->size());
+	//_MESSAGE("gathered RNAM count in cell %d", formIDs->size());
 }
 
 void ReadRNAM(RE::TESWorldSpace * worldSpace, ModInfo * modInfo, UInt32 * rnam)
@@ -341,7 +341,7 @@ void ReadRNAM(RE::TESWorldSpace * worldSpace, ModInfo * modInfo, UInt32 * rnam)
 	// note: x and y are swapped on rnam data, maybe all? idk
 	RE::TESWorldSpace::XYPlane plane = *reinterpret_cast<RE::TESWorldSpace::XYPlane *>(rnam);
 
-	_MESSAGE("read RNAM hook called on worldspace %s modname %s rnam cell x %d, y %d rnam count %d", dynamic_cast<RE::TESForm*>(worldSpace)->GetName(), modInfo->name, plane.y, plane.x, rnam[1]);
+	//_MESSAGE("read RNAM hook called on worldspace %s modname %s rnam cell x %d, y %d rnam count %d", dynamic_cast<RE::TESForm*>(worldSpace)->GetName(), modInfo->name, plane.y, plane.x, rnam[1]);
 
 	auto wsRNAMMapIterator = worldSpaceRNAMMap.find(worldSpace);
 
@@ -351,29 +351,29 @@ void ReadRNAM(RE::TESWorldSpace * worldSpace, ModInfo * modInfo, UInt32 * rnam)
 
 		if (wsFormIDCellMapIterator != worldSpaceFormIDCellMap.end())
 		{
-			auto cellFormIDMap = wsRNAMMapIterator->second;
-			auto formIDCellMap = wsFormIDCellMapIterator->second;
-			const auto cellMapIterator = cellFormIDMap.find(rnam[0]);
+			auto cellFormIDMap = &wsRNAMMapIterator->second;
+			auto formIDCellMap = &wsFormIDCellMapIterator->second;
+			const auto cellMapIterator = (*cellFormIDMap).find(rnam[0]);
 
-			if (cellMapIterator == cellFormIDMap.end())
+			if (cellMapIterator == (*cellFormIDMap).end())
 			{
 				std::unordered_set<UInt32> formIDs;
-				GatherRNAMs(&formIDs, rnam, &cellFormIDMap, &formIDCellMap, modInfo);
-				cellFormIDMap.insert(std::make_pair(rnam[0], formIDs));
+				GatherRNAMs(&formIDs, rnam, cellFormIDMap, formIDCellMap, modInfo);
+				(*cellFormIDMap).insert(std::make_pair(rnam[0], formIDs));
 			}
 			else
 			{
-				GatherRNAMs(&cellMapIterator->second, rnam, &cellFormIDMap, &formIDCellMap, modInfo);
-			}
+				GatherRNAMs(&cellMapIterator->second, rnam, cellFormIDMap, formIDCellMap, modInfo);
+			};
 		}
 		else
 		{
-			_MESSAGE("something went horribly wrong");
+			//_MESSAGE("something went horribly wrong");
 		}
 	}
 	else
 	{
-		_MESSAGE("something went horribly wrong");
+		//_MESSAGE("something went horribly wrong");
 	}
 }
 
@@ -425,17 +425,17 @@ extern "C" {
 	}
 
 	bool SKSEPlugin_Load(const SKSEInterface * skse) {
-
+		
 		if (g_messaging)
 			g_messaging->RegisterListener(g_pluginHandle, "SKSE", SKSEMessageHandler);
-
+		
 		_MESSAGE("Installing Worldspace Load Hook");
 		orig_TESWorldSpace_LoadForm = *vtbl_TESWorldSpace_LoadForm;
 		SafeWrite64(vtbl_TESWorldSpace_LoadForm.GetUIntPtr(), GetFnAddr(hook_TESWorldSpace_LoadForm));
 		//orig_TESWorldSpace_LoadBuffer = *vtbl_TESWorldSpace_LoadBuffer;
 		//SafeWrite64(vtbl_TESWorldSpace_LoadBuffer.GetUIntPtr(), GetFnAddr(hook_TESWorldSpace_LoadBuffer));
 		_MESSAGE("Installed");
-
+		
 		_MESSAGE("hooking ModInfo_IsMaster");
 
 		constexpr uintptr_t is_master_patch = 0x0017E320;
@@ -462,7 +462,7 @@ extern "C" {
 		orig_TESObjectREFR_LoadForm = *vtbl_TESObjectREFR_LoadForm;
 		SafeWrite64(vtbl_TESObjectREFR_LoadForm.GetUIntPtr(), GetFnAddr(hook_TESObjectREFR_LoadForm));
 		_MESSAGE("done");*/
-
+		
 		_MESSAGE("RNAM accumulator hook");
 		{
 			struct ReadRNAMHook_Code : Xbyak::CodeGenerator
@@ -483,10 +483,10 @@ extern "C" {
 					mov(rdx, r13); // arg2: ModInfo
 					mov(r8, rdi); // arg3: rnam data
 					// again too lazy to check if stack fixing is necessary for this function but it probably will be in release mode
-					sub(rsp, 0x20);
+					sub(rsp, 0x28);
 					call(ptr[rip + readRNAMLabel]);
 					// fix everything
-					add(rsp, 0x20);
+					add(rsp, 0x28);
 					pop(r11);
 					pop(r10);
 					pop(r9);
