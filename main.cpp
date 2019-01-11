@@ -49,9 +49,14 @@ std::unordered_map<RE::TESWorldSpace *, formIDCellMap> worldSpaceFormIDCellMap;
 
 bool hook_TESObjectREFR_LoadForm(RE::TESObjectREFR * refr, ModInfo * modInfo)
 {
+	uintptr_t returnAddr = (uintptr_t)(_ReturnAddress()) - RelocationManager::s_baseAddr;
+
 	bool retVal = orig_TESObjectREFR_LoadForm(refr, modInfo);
-	if (retVal)
-		_MESSAGE("TESObjectREFR_LoadForm called, formid %d, large ref %d", refr->formID, TESObjectREFR_IsValidLargeRef(refr));
+	if (strncmp("overwrite.esp", modInfo->name, 13) == 0 || strncmp("largereftest.esm", modInfo->name, 16) == 0)
+	{
+		if (retVal)
+			_MESSAGE("TESObjectREFR_LoadForm called, formid 0x%08x (ptr 0x%016" PRIXPTR "), flags 0x%04x, mod %s, large ref %d, address 0x%016" PRIXPTR "", refr->formID, refr, refr->flags, modInfo->name, TESObjectREFR_IsValidLargeRef(refr), returnAddr);
+	}
 	return retVal;
 }
 
@@ -66,7 +71,6 @@ bool hook_TESWorldSpace_LoadForm(RE::TESWorldSpace * worldSpace, ModInfo * modIn
 	}
 
 	bool retVal = orig_TESWorldSpace_LoadForm(worldSpace, modInfo);
-
 
 	//worldSpace->largeReferenceData.cellFormIDMap.clear();
 	//worldSpace->largeReferenceData.FormIDCellMap.clear();
@@ -123,7 +127,16 @@ char hook_ModInfo_IsMaster(ModInfo * modInfo)
 	if (!(modInfo->unk438 & 1))
 	{
 		uintptr_t returnAddr = (uintptr_t)(_ReturnAddress()) - RelocationManager::s_baseAddr;
-		//_MESSAGE("hook_ModInfo_IsMaster called with return address 0x%016" PRIXPTR " for plugin %s", returnAddr, modInfo->name);
+		//if (strncmp("overwrite.esp", modInfo->name, 13) == 0)
+		//{
+			//_MESSAGE("hook_ModInfo_IsMaster called with return address 0x%016" PRIXPTR " for plugin %s", returnAddr, modInfo->name);
+			if (returnAddr == 0x285A09)
+			{
+				_MESSAGE("faking ESM for %s, return address 0x%016" PRIXPTR "", modInfo->name, returnAddr);
+				return 1;
+			}
+		//}
+
 		/*returnAddr == 0x1706E8 ||
 			returnAddr == 0x2B0D51 ||
 			returnAddr == 0x19489E ||
@@ -136,7 +149,7 @@ char hook_ModInfo_IsMaster(ModInfo * modInfo)
 			//returnAddr == 0x2857EE ||
 			//returnAddr == 0x285A09 ||
 			//returnAddr == 0x25FA28 ||*/
-		if (returnAddr == 0x171526)
+		/*if (returnAddr == 0x171526)
 		{
 			_MESSAGE("faking ESM for %s, return address 0x%016" PRIXPTR " (large reference loading)", modInfo->name, returnAddr);
 			return 1;
@@ -145,7 +158,8 @@ char hook_ModInfo_IsMaster(ModInfo * modInfo)
 		{
 			_MESSAGE("faking ESM for %s, return address 0x%016" PRIXPTR " (normal reference loading)", modInfo->name, returnAddr);
 			return 1;
-		}
+		}*/
+
 	}
 
 	return modInfo->unk438 & 1;
@@ -171,6 +185,27 @@ UInt32 GetRNAMCount(RE::BSTHashMap<RE::TESWorldSpace::XYPlane, UInt32 *> * map)
 
 	return count;
 }
+
+void PrintRNAM(RE::BSTHashMap<RE::TESWorldSpace::XYPlane, UInt32 *> * map)
+{
+	for (int i = 0; i < map->max_size(); i++)
+	{
+		auto entry = map->_entries[i];
+
+		if (entry.next == nullptr)
+			continue;
+
+		UInt32 * rnam = entry.GetValue();
+
+		for (int i = 0; i < rnam[0]; i++)
+		{
+			UInt32 formID = rnam[i + 1];
+
+			_MESSAGE("formID 0x%08x cell x %d cell y %d", formID, entry.GetKey().y, entry.GetKey().x);
+		}
+	}
+
+}
 void UpdateWorldspaceRNAM()
 {
 	_MESSAGE("Load completed, updating all worldspace RNAM data");
@@ -181,7 +216,13 @@ void UpdateWorldspaceRNAM()
 
 		formIDCellMap formMap = worldSpaceFormIDCellMapIt->second;
 
-		//_MESSAGE("worldspace %s current RNAM cell count %d current filtered RNAM count %d", dynamic_cast<RE::TESForm*>(ws)->GetName(), GetRNAMCount(&ws->largeReferenceData.cellFormIDMap), GetRNAMCount(&ws->largeReferenceData.cellFormIDMapFiltered));
+		_MESSAGE("worldspace %s current RNAM cell count %d current filtered RNAM count %d", dynamic_cast<RE::TESForm*>(ws)->GetName(), GetRNAMCount(&ws->largeReferenceData.cellFormIDMap), GetRNAMCount(&ws->largeReferenceData.cellFormIDMapFiltered));
+
+		if (strncmp("Infernum", dynamic_cast<RE::TESForm*>(ws)->GetName(), 8) == 0)
+		{
+			PrintRNAM(&ws->largeReferenceData.cellFormIDMap);
+			PrintRNAM(&ws->largeReferenceData.cellFormIDMapFiltered);
+		}
 		ws->largeReferenceData.cellFormIDMap.clear();
 		ws->largeReferenceData.formIDCellMap.clear();
 		ws->largeReferenceData.cellFormIDMapFiltered.clear();
@@ -215,11 +256,15 @@ void UpdateWorldspaceRNAM()
 				i++;
 			}
 
-			ws->largeReferenceData.cellFormIDMap.insert(cellPlane, formIDArray);
+			//ws->largeReferenceData.cellFormIDMap.insert(cellPlane, formIDArray);
 			ws->largeReferenceData.cellFormIDMapFiltered.insert(cellPlane, formIDArraySecond);
 		}
 
-		//_MESSAGE("new RNAM count %d", GetRNAMCount(&ws->largeReferenceData.cellFormIDMapFiltered));
+		_MESSAGE("new RNAM count %d", GetRNAMCount(&ws->largeReferenceData.cellFormIDMapFiltered));
+		if (strncmp("Infernum", dynamic_cast<RE::TESForm*>(ws)->GetName(), 8) == 0)
+		{
+			PrintRNAM(&ws->largeReferenceData.cellFormIDMapFiltered);
+		}
 
 	}
 
@@ -228,13 +273,29 @@ void UpdateWorldspaceRNAM()
 	worldSpaceFormIDCellMap.clear();
 }
 
+void DoSomethingDangerous()
+{
+	for (auto const& [ws, formIDmap] : worldSpaceFormIDCellMap)
+	{
+		for (auto const& [formID, cell] : formIDmap)
+		{
+			const auto form = LookupFormByID(formID);
+			if (form)
+			{
+				form->unk18 &= ~(1UL << 6);
+			}
+		}
+	}
+}
+
 void SKSEMessageHandler(SKSEMessagingInterface::Message * message)
 {
 	switch (message->type)
 	{
 	case SKSEMessagingInterface::kMessage_DataLoaded:
 	{
-		UpdateWorldspaceRNAM();
+		DoSomethingDangerous();
+		//UpdateWorldspaceRNAM();
 	}
 	break;
 	default:
@@ -368,12 +429,12 @@ void ReadRNAM(RE::TESWorldSpace * worldSpace, ModInfo * modInfo, UInt32 * rnam)
 		}
 		else
 		{
-			//_MESSAGE("something went horribly wrong");
+			_MESSAGE("something went horribly wrong");
 		}
 	}
 	else
 	{
-		//_MESSAGE("something went horribly wrong");
+		_MESSAGE("something went horribly wrong");
 	}
 }
 
@@ -458,10 +519,11 @@ extern "C" {
 		//SafeWrite64(DisableLoadRNAM.GetUIntPtr(), retn_1);
 		//_MESSAGE("done");
 
-		/*_MESSAGE("Installing REFR load hook");
+		_MESSAGE("Installing REFR load hook");
 		orig_TESObjectREFR_LoadForm = *vtbl_TESObjectREFR_LoadForm;
 		SafeWrite64(vtbl_TESObjectREFR_LoadForm.GetUIntPtr(), GetFnAddr(hook_TESObjectREFR_LoadForm));
-		_MESSAGE("done");*/
+		_MESSAGE("done");
+
 		
 		_MESSAGE("RNAM accumulator hook");
 		{
@@ -516,6 +578,7 @@ extern "C" {
 			g_branchTrampoline.Write6Branch(RNAMHook_Enter.GetUIntPtr(), uintptr_t(code.getCode()));
 
 		}
+	    
 		_MESSAGE("done");
 		return true;
 	}
